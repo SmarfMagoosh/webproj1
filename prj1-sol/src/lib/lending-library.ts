@@ -46,8 +46,11 @@ export class LendingLibrary {
 
   //TODO: declare private TS properties for instance
   
+  books: Book[];
+  
   constructor() {
     //TODO: initialize private TS properties for instance
+    this.books = [];
   }
 
   /** Add one-or-more copies of book represented by req to this library.
@@ -60,8 +63,35 @@ export class LendingLibrary {
    *             inconsistent with the data already present.
    */
   addBook(req: Record<string, any>): Errors.Result<XBook> {
-    //TODO
-    return Errors.errResult('TODO');  //placeholder
+    let bookToAdd = {
+      isbn: "",
+      title: "",
+      authors: [""],
+      pages: -1,
+      year: -1,
+      publisher: "",
+      nCopies: 1
+    };
+
+    (Object.keys(bookToAdd) as Array<keyof typeof bookToAdd>).forEach((key) => {
+      if (key === "nCopies") {
+        // skip
+      } else if (req[key] === undefined) {
+        return Errors.errResult(`MISSING: ${key}`);
+      } else if (typeof bookToAdd[key] !== typeof req[key]) {
+        return Errors.errResult(`BAD_TYPE: ${key}`)
+      } else {
+        (bookToAdd as any)[key] = req[key]
+      }
+    });
+
+    if (req.nCopies !== undefined) {
+      (bookToAdd as any).nCopies = req.nCopies;
+    }
+    this.books.push(bookToAdd);
+
+    console.log(this.books);
+    return Errors.okResult(bookToAdd);
   }
 
   /** Return all books matching (case-insensitive) all "words" in

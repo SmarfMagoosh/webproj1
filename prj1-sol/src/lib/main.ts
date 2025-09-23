@@ -6,6 +6,7 @@ import { readJson } from 'cs544-node-utils';
 import { Errors } from 'cs544-js-utils';
 
 import {LendingLibrary, makeLendingLibrary} from './lending-library.js';
+import { Err } from 'cs544-js-utils/dist/lib/errors.js';
 
 /*************************** Top-Level Code ****************************/
 
@@ -18,7 +19,7 @@ export default async function main(args: string[]) {
 }
 
 //change to true after completing addBook() method.
-const CHECK_INIT_LOAD = false;
+const CHECK_INIT_LOAD = true;
 
 async function go(paths: string[]) {
   assert(paths.length > 0);
@@ -97,7 +98,7 @@ function doCommand(library: LendingLibrary,
 {
   return (cmd === 'help') 
     ? help()
-    : library[cmd as keyof LendingLibrary]!.call(library, args);
+    : (library[cmd as keyof LendingLibrary]! as Function).call(library, args);
 }
 
 
