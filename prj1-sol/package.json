@@ -1,8 +1,8 @@
 {
   "name": "prj1-sol",
   "version": "1.0.0",
-  "type": "module",
-  "description": "Name:Evan Dreher B-Number:\tXXX Email: edreher@binghamton.edu",
+  "type" : "module",
+  "description": "Name:Evan Dreher B-Number:B01088722 Email: edreher@binghamton.edu \nName:Ateeq Ur Rahman B-Number: B01109385 Email: arahman41@binghamton.edu ",
   "main": "index.js",
   "scripts": {
     "clean": "shx rm -rf dist",
