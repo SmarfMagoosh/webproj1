@@ -45,14 +45,18 @@ export function makeLendingLibrary() {
 }
 
 export class LendingLibrary {
-  books: Book[];
+  private books: XBook[];
+  private checkout: Map<string, XBook[]>;
   
   constructor() {
-    this.books = []
+    this.books = [];
+    this.checkout = new Map();
   }
 
-  // auxillary domain-specific validator function for book data
-  validate(req: Record<string, any>): Errors.Result<Errors.Err> {
+  /********************** Validator Functions ***********************/
+
+  // validator function for adding book request
+  private validateAddRequest(req: Record<string, any>): Errors.Result<Errors.Err> {
     const num_fields = ["pages", "year", "nCopies"]
     const isString = (x: any) => typeof x === "string";
     const isInt = (x: any) => typeof x === "number";
@@ -91,6 +95,73 @@ export class LendingLibrary {
     return Errors.VOID_RESULT as Errors.Result<Errors.Err>;
   }
 
+    // validator function for checkout request
+  private validateCheckoutRequest(req: Record<string, any>) : Errors.Result<Errors.Err> {
+    // check presence
+    if (req.patronId === undefined) {
+      return new Errors.ErrResult([Errors.error("patronId", {code: "MISSING", widget: "patronId"})]);
+    } else if (req.isbn === undefined) {
+      return new Errors.ErrResult([Errors.error("isbn", {code: "MISSING", widget: "isbn"})]);
+    }
+
+    // check types
+    if (typeof req.patronId !== "string") {
+      return new Errors.ErrResult([Errors.error("patronId", {code: "BAD_TYPE", widget: "patronId"})]);
+    } else if (typeof req.isbn !== "string") {
+      return new Errors.ErrResult([Errors.error("isbn", {code: "BAD_TYPE", widget: "isbn"})]);
+    }
+
+    // check other constraints
+    // patron must have a name
+    if (req.patronId === "") {
+      return new Errors.ErrResult([Errors.error("patronId", {code: "BAD_REQ", widget: "patronId"})]);
+    }
+
+    // patron must be trying to check out a book that exists
+    if (this.books.every((a: XBook) => a.isbn != req.isbn)) {
+      return new Errors.ErrResult([Errors.error("isbn", {code: "BAD_REQ", widget: "isbn"})])
+    }
+
+    const book: XBook = this.getBook(req.isbn)!;
+
+    // patron must be trying to check out a book they don't already have
+    if (this.checkout.get(req.patronId)?.some((b: XBook) => this.areEqual(book, b))) {
+      return new Errors.ErrResult([Errors.error("isbn", {code: "BAD_REQ", widget: "isbn"})]);
+    }
+
+    // patron must be trying to check out a book that has a spare copy
+    if (!this.inStock(book)) {
+      return new Errors.ErrResult([Errors.error("isbn", {code: "BAD_REQ", widget: "isbn"})]);
+    }
+
+    return Errors.VOID_RESULT as Errors.Result<Errors.Err>;
+  }
+
+  /********************** Utility Methods ***********************/
+  private getBook(isbn: string): XBook | null {
+    for (let book of this.books) {
+      if (book.isbn === isbn) {
+        return book;
+      }
+    }
+    return null;
+  }
+
+  private areEqual(b1: XBook, b2: XBook): boolean {
+    return b1.isbn === b2.isbn;
+  }
+
+  private inStock(book: XBook): boolean {
+    let count = 0;
+    for (let v of this.checkout.values()) {
+      if (v.some((b: XBook) => this.areEqual(b, book))) {
+        count++;
+      }
+    }
+    return book.nCopies > count;
+  }
+
+  /********************** Required ***********************/
   /** Add one-or-more copies of book represented by req to this library.
    *
    *  Errors:
@@ -101,7 +172,7 @@ export class LendingLibrary {
    *             inconsistent with the data already present.
    */
   addBook(req: Record<string, any>): Errors.Result<XBook> {
-    const validation = this.validate(req);
+    const validation = this.validateCheckoutRequest(req);
     if (validation.isOk) {
       const bookToAdd: XBook = {
         isbn: req.isbn,
@@ -134,6 +205,7 @@ export class LendingLibrary {
   }
 
 
+
   /** Set up patron req.patronId to check out book req.isbn. 
    * 
    *  Errors:
@@ -142,8 +214,18 @@ export class LendingLibrary {
    *    BAD_REQ error on business rule violation.
    */
   checkoutBook(req: Record<string, any>) : Errors.Result<void> {
-    //TODO
-    return Errors.errResult('TODO');  //placeholder
+    const validation = this.validateAddRequest(req);
+    if (validation.isOk) {
+      const [patron, id] = [req.patronId, req.isbn];
+      if (this.checkout.has(patron)) {
+        this.checkout.get(patron)!.push(id);
+      } else {
+        this.checkout.set(patron, [id]);
+      }
+      return Errors.VOID_RESULT;
+    } else {
+      return Errors.errResult(validation);
+    }
   }
 
   /** Set up patron req.patronId to returns book req.isbn.

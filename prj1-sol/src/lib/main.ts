@@ -95,16 +95,9 @@ function doLine(library: LendingLibrary, line: string) {
 
 function doCommand(library: LendingLibrary,
 		   cmd: string, args: Record<string, any>) {
-  if (cmd === "help") {
-    return help();
-  } else {
-    const fn = (library[cmd as keyof LendingLibrary]! as Function);
-    if (typeof fn === "function") {
-      return fn.call(library, args);
-    } else {
-      throw new Error(`${cmd} is not a method of LendingLibrary`)
-    }
-  }
+  return (cmd === "help") 
+    ? help()
+    : library[cmd as keyof LendingLibrary]!.call(library, args);
 }
 
 
@@ -114,7 +107,6 @@ function help() {
     .join('\n');
   console.log(msg);
 }
-
 
 const COMMANDS =
   [ 'help', 'addBook', 'findBooks', 'checkoutBook', 'returnBook' ];
