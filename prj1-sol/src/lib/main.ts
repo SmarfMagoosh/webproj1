@@ -93,11 +93,17 @@ function doLine(library: LendingLibrary, line: string) {
 }
 
 function doCommand(library: LendingLibrary,
-		   cmd: string, args: Record<string, any>)
-{
-  return (cmd === 'help') 
-    ? help()
-    : library[cmd as keyof LendingLibrary]!.call(library, args);
+		   cmd: string, args: Record<string, any>) {
+  if (cmd === "help") {
+    return help();
+  } else {
+    const fn = library[cmd as keyof LendingLibrary]!;
+    if (typeof fn === "function") {
+      return fn.call(library, args);
+    } else {
+      throw new Error(`${cmd} is not a method of LendingLibrary`)
+    }
+  }
 }
 
 

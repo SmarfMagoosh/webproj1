@@ -1,4 +1,6 @@
 import { Errors } from 'cs544-js-utils';
+import { title } from 'process';
+import { receiveMessageOnPort } from 'worker_threads';
 
 /** Note that errors are documented using the `code` option which must be
  *  returned (the `message` can be any suitable string which describes
@@ -43,11 +45,50 @@ export function makeLendingLibrary() {
 }
 
 export class LendingLibrary {
-
-  //TODO: declare private TS properties for instance
+  books: Book[];
   
   constructor() {
-    //TODO: initialize private TS properties for instance
+    this.books = []
+  }
+
+  // auxillary domain-specific validator function for book data
+  validate(req: Record<string, any>): Errors.Result<Errors.Err> {
+    const num_fields = ["pages", "year", "nCopies"]
+    const isString = (x: any) => typeof x === "string";
+    const isInt = (x: any) => typeof x === "number";
+    const isStringArr = (x: any) => Array.isArray(x) && x.every(isString) && x.length > 0;
+    const bookTypeChecker = {
+      isbn: isString,
+      title: isString,
+      authors: isStringArr,
+      pages: isInt,
+      year: isInt,
+      publisher: isString,
+      nCopies: (x: any) => x === undefined || isInt(x)
+    }
+
+    for (let key in bookTypeChecker) {
+      const value = req[key];
+      // make sure we are given a value (except nCopies which can be ommitted)
+      if (value === undefined && key !== "nCopies") {
+        return new Errors.ErrResult([Errors.error(key, {code: "MISSING", widget: key})]);
+      }
+      // run the type checking function to make sure each entry is well typed
+      if (!bookTypeChecker[key as keyof typeof bookTypeChecker](value)) {
+        return new Errors.ErrResult([Errors.error(key, {code: "BAD_TYPE", widget: key})]);
+      }
+      if (num_fields.includes(key)) {
+        // when doing numerical checks, skip nCopies if its not present
+        if (key === "nCopies" && value === undefined) {
+          continue;
+        // check that each present numerical entry is a positive integer
+        } else if (!Number.isInteger(value) || value <= 0) {
+          return new Errors.ErrResult([Errors.error(key, {code: "BAD_REQ", widget: key})]);
+        }
+      }
+    }
+
+    return Errors.VOID_RESULT as Errors.Result<Errors.Err>;
   }
 
   /** Add one-or-more copies of book represented by req to this library.
@@ -60,8 +101,22 @@ export class LendingLibrary {
    *             inconsistent with the data already present.
    */
   addBook(req: Record<string, any>): Errors.Result<XBook> {
-    //TODO
-    return Errors.errResult('TODO');  //placeholder
+    const validation = this.validate(req);
+    if (validation.isOk) {
+      const bookToAdd: XBook = {
+        isbn: req.isbn,
+        title: req.title,
+        authors: req.authors,
+        pages: req.pages,
+        year: req.year,
+        publisher: req.publisher,
+        nCopies: req.nCopies ?? 1
+      };
+      this.books.push(bookToAdd);
+      return Errors.okResult(bookToAdd);    
+    } else {
+      return Errors.errResult(validation);
+    }
   }
 
   /** Return all books matching (case-insensitive) all "words" in
