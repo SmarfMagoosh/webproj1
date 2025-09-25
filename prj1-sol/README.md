@@ -1,4 +1,6 @@
 # webproj1
+Group: 3
+
 Name:       Evan Dreher 
 B-Number:   B01088722 
 Email:      edreher@binghamton.edu 
