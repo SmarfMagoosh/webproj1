@@ -53,124 +53,6 @@ export class LendingLibrary {
     this.checkout = new Map();
   }
 
-  /********************** Validator Functions ***********************/
-
-  // validator function for adding book request
-  private validateAddRequest(req: Record<string, any>): Errors.Result<Errors.Err> {
-    const num_fields = ["pages", "year", "nCopies"]
-    const isString = (x: any) => typeof x === "string";
-    const isInt = (x: any) => typeof x === "number";
-    const isStringArr = (x: any) => Array.isArray(x) && x.every(isString) && x.length > 0;
-    const bookTypeChecker = {
-      isbn: isString,
-      title: isString,
-      authors: isStringArr,
-      pages: isInt,
-      year: isInt,
-      publisher: isString,
-      nCopies: (x: any) => x === undefined || isInt(x)
-    }
-
-    for (let key in bookTypeChecker) {
-      const value = req[key];
-      // make sure we are given a value (except nCopies which can be ommitted)
-      if (value === undefined && key !== "nCopies") {
-        return new Errors.ErrResult([Errors.error(key, {code: "MISSING", widget: key})]);
-      }
-      // run the type checking function to make sure each entry is well typed
-      if (!bookTypeChecker[key as keyof typeof bookTypeChecker](value)) {
-        return new Errors.ErrResult([Errors.error(key, {code: "BAD_TYPE", widget: key})]);
-      }
-      if (num_fields.includes(key)) {
-        // when doing numerical checks, skip nCopies if its not present
-        if (key === "nCopies" && value === undefined) {
-          continue;
-        // check that each present numerical entry is a positive integer
-        } else if (!Number.isInteger(value) || value <= 0) {
-          return new Errors.ErrResult([Errors.error(key, {code: "BAD_REQ", widget: key})]);
-        }
-      }
-    }
-
-    return Errors.VOID_RESULT as Errors.Result<Errors.Err>;
-  }
-
-    // validator function for checkout request
-  private validateCheckoutRequest(req: Record<string, any>) : Errors.Result<Errors.Err> {
-    // check presence
-    if (req.patronId === undefined) {
-      return new Errors.ErrResult([Errors.error("patronId", {code: "MISSING", widget: "patronId"})]);
-    } else if (req.isbn === undefined) {
-      return new Errors.ErrResult([Errors.error("isbn", {code: "MISSING", widget: "isbn"})]);
-    }
-
-    // check types
-    if (typeof req.patronId !== "string") {
-      return new Errors.ErrResult([Errors.error("patronId", {code: "BAD_TYPE", widget: "patronId"})]);
-    } else if (typeof req.isbn !== "string") {
-      return new Errors.ErrResult([Errors.error("isbn", {code: "BAD_TYPE", widget: "isbn"})]);
-    }
-
-    // check other constraints
-    // patron must have a name
-    if (req.patronId === "") {
-      return new Errors.ErrResult([Errors.error("patronId", {code: "BAD_REQ", widget: "patronId"})]);
-    }
-
-    // patron must be trying to check out a book that exists
-    if (this.books.every((a: XBook) => a.isbn != req.isbn)) {
-      return new Errors.ErrResult([Errors.error("isbn", {code: "BAD_REQ", widget: "isbn"})])
-    }
-
-    const book: XBook = this.getBook(req.isbn)!;
-    // patron must be trying to check out a book they don't already have
-    if (this.checkout.get(req.patronId)?.some((b: XBook) => this.areEqual(book, b))) {
-      return new Errors.ErrResult([Errors.error("isbn", {code: "BAD_REQ", widget: "isbn"})]);
-    }
-
-    // patron must be trying to check out a book that has a spare copy
-    if (!this.inStock(book)) {
-      return new Errors.ErrResult([Errors.error("isbn", {code: "BAD_REQ", widget: "isbn"})]);
-    }
-
-    return Errors.VOID_RESULT as Errors.Result<Errors.Err>;
-  }
-
-  private validateReturnRequest(req: Record<string, any>): Errors.Result<Errors.Err> {
-    // check presence
-    if (req.patronId === undefined) {
-      return new Errors.ErrResult([Errors.error("patronId", {code: "MISSING", widget: "patronId"})]);
-    } else if (req.isbn === undefined) {
-      return new Errors.ErrResult([Errors.error("isbn", {code: "MISSING", widget: "isbn"})]);
-    }
-
-    // check types
-    if (typeof req.patronId !== "string") {
-      return new Errors.ErrResult([Errors.error("patronId", {code: "BAD_TYPE", widget: "patronId"})]);
-    } else if (typeof req.isbn !== "string") {
-      return new Errors.ErrResult([Errors.error("isbn", {code: "BAD_TYPE", widget: "isbn"})]);
-    }
-
-    // check other constraints
-    // patron must have a name
-    if (req.patronId === "") {
-      return new Errors.ErrResult([Errors.error("patronId", {code: "BAD_REQ", widget: "patronId"})]);
-    }
-
-    // patron must be trying to return a book that exists
-    if (this.books.every((a: XBook) => a.isbn != req.isbn)) {
-      return new Errors.ErrResult([Errors.error("isbn", {code: "BAD_REQ", widget: "isbn"})])
-    }
-    const book = this.getBook(req.isbn)!;
-
-    // patron must be trying to return a book that they checked out previously
-    if (!this.checkout.get(req.patronId)?.some((b: XBook) => this.areEqual(b, book))) {
-      return new Errors.ErrResult([Errors.error("isbn", {code: "BAD_REQ", widget: "isbn"})]);
-    }
-
-    return Errors.VOID_RESULT as Errors.Result<Errors.Err>;
-  }
-
   /********************** Utility Methods ***********************/
   private getBook(isbn: string): XBook | null {
     for (let book of this.books) {
@@ -206,7 +88,24 @@ export class LendingLibrary {
    *             inconsistent with the data already present.
    */
   addBook(req: Record<string, any>): Errors.Result<XBook> {
-    const validation = this.validateAddRequest(req);
+    const isString = (x: any) => typeof x === "string";
+    const typeChecker = {
+      isbn: isString,
+      title: isString,
+      authors: (x: any) => Array.isArray(x) && x.every(isString) && x.length > 0,
+      pages: (x: any) => typeof x === "number",
+      year: (x: any) => typeof x === "number",
+      publisher: isString,
+      nCopies: (x: any) => typeof x === "number"
+    }
+    const semanticChecker = {
+      pages: [(x: any) => Number.isInteger(x), (x: any) => x > 0],
+      year: [(x: any) => Number.isInteger(x), (x: any) => x > 0],
+      nCopies: [(x: any) => Number.isInteger(x), (x: any) => x > 0]
+    }
+
+    const validation = validate({nCopies: 1, ...req}, typeChecker, semanticChecker);
+    
     if (validation.isOk) {
       const bookToAdd: XBook = {
         isbn: req.isbn,
@@ -238,8 +137,6 @@ export class LendingLibrary {
     return Errors.errResult('TODO');  //placeholder
   }
 
-
-
   /** Set up patron req.patronId to check out book req.isbn. 
    * 
    *  Errors:
@@ -248,7 +145,32 @@ export class LendingLibrary {
    *    BAD_REQ error on business rule violation.
    */
   checkoutBook(req: Record<string, any>) : Errors.Result<void> {
-    const validation = this.validateCheckoutRequest(req);
+    const typeChecker = {
+      patronId: (x: any) => typeof x === "string",
+      isbn: (x: any) => typeof x === "string"
+    };
+    const semanticChecker = {
+      patronId: [(x: any) => x !== ""],   
+      isbn: [
+        // patron must be trying to check out a book that exists
+        (x: any) => this.books.some((b: XBook) => x === b.isbn),
+        
+        // patron must be trying to check out a book that we have a copy of
+        (x: any) => this.inStock(this.getBook(x)!),
+
+        // patron must not be trying to check out a book they already have
+        (x: any) => {
+          const p = req.patronId;
+          if (!this.checkout.has(p)) {
+            return true;
+          } else {
+            const b = this.getBook(x)!;
+            return !this.checkout.get(p)!.some((x: XBook) => this.areEqual(b, x))
+          }
+        }
+      ]
+    }
+    const validation = validate(req, typeChecker, semanticChecker);
     if (validation.isOk) {
       const [patron, book] = [req.patronId, this.getBook(req.isbn)!];
       if (this.checkout.has(patron)) {
@@ -270,7 +192,22 @@ export class LendingLibrary {
    *    BAD_REQ error on business rule violation.
    */
   returnBook(req: Record<string, any>) : Errors.Result<void> {
-    const validation = this.validateReturnRequest(req);
+    const typeChecker = {
+      patronId: (x: any) => typeof x === "string",
+      isbn: (x: any) => typeof x === "string"
+    };
+    const semanticChecker = {
+      patronId: [(x: any) => x !== ""],
+      isbn: [
+        // patron must be trying to return a book that exists
+        (x: any) => this.books.some((b: XBook) => b.isbn === x),
+
+        // patron must be trying to return a book they have checked out
+        (x: any) => this.checkout.get(req.patronId)?.some((b: XBook) => b.isbn === x) ?? false
+      ]
+    }
+
+    const validation = validate(req, typeChecker, semanticChecker);
     if (validation.isOk) {
       const book = this.getBook(req.isbn)!;
       const checkoutList = this.checkout.get(req.patronId)!
@@ -293,8 +230,30 @@ export class LendingLibrary {
 
 /********************** Domain Utility Functions ***********************/
 
+function validate(
+    req: Record<string, any>, 
+    typeChecker: Record<string, (x: any) => boolean>, 
+    semantics: Record<string, ((x: any) => boolean)[]>
+  ): Errors.Result<Errors.Err> {
+  // check presence and type
+  for (let key in typeChecker) {
+    if (req[key] === undefined) {
+      return new Errors.ErrResult([Errors.error(key, {code: "MISSING", widget: key})]);
+    } else if (!typeChecker[key](req[key])) {
+      return new Errors.ErrResult([Errors.error(key, {code: "BAD_TYPE", widget: key})]);
+    } 
+  }
 
-//TODO: add domain-specific utility functions or classes.
+  for (let key in semantics) {
+    for (let predicate of semantics[key]) {
+      if (!predicate(req[key])) {
+        return new Errors.ErrResult([Errors.error(key, {code: "BAD_REQ", widget: key})]);
+      }
+    }
+  }
+
+  return Errors.VOID_RESULT as Errors.Result<Errors.Err>
+}
 
 /********************* General Utility Functions ***********************/
 
