@@ -133,8 +133,46 @@ export class LendingLibrary {
    *    BAD_REQ: no words in search
    */
   findBooks(req: Record<string, any>) : Errors.Result<XBook[]> {
-    //TODO
-    return Errors.errResult('TODO');  //placeholder
+    const typeChecker = {
+    search: (x: any) => typeof x === "string"
+  };
+  
+  const semanticChecker = {
+    search: [
+      (x: string) => {
+        const words = x.match(/\w+/g) || [];
+        return words.some(word => word.length > 1);
+      }
+    ]
+  };
+
+  const validation = validate(req, typeChecker, semanticChecker);
+  if (!validation.isOk) {
+    return Errors.errResult(validation);
+  }
+
+  // Extract words from search string 
+  const searchText = req.search.toLowerCase();
+  const words = (searchText.match(/\w+/g) || [])
+    .filter((word: string) => word.length > 1);
+
+  // Filter books that match ALL words
+  const matchingBooks = this.books.filter(book => {
+    // Create a searchable text string from book properties
+    const bookText = [
+      book.title,
+      book.authors.join(' '),
+      book.publisher
+    ].join(' ').toLowerCase();
+
+    // Checking if words are present in the book text
+    return words.every((word: string) => bookText.includes(word));
+  });
+
+  // Sorting titles in ascending order
+  matchingBooks.sort((a, b) => a.title.localeCompare(b.title));
+
+  return Errors.okResult(matchingBooks);
   }
 
   /** Set up patron req.patronId to check out book req.isbn. 
