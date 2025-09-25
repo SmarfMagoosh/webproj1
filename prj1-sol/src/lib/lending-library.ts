@@ -288,7 +288,4 @@ function validate(
   return Errors.VOID_RESULT as Errors.Result<Errors.Err>
 }
 
-/********************* General Utility Functions ***********************/
-
-//TODO: add general utility functions or classes.
 
