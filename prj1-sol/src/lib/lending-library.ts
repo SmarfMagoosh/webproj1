@@ -123,7 +123,6 @@ export class LendingLibrary {
     }
 
     const book: XBook = this.getBook(req.isbn)!;
-
     // patron must be trying to check out a book they don't already have
     if (this.checkout.get(req.patronId)?.some((b: XBook) => this.areEqual(book, b))) {
       return new Errors.ErrResult([Errors.error("isbn", {code: "BAD_REQ", widget: "isbn"})]);
@@ -131,6 +130,41 @@ export class LendingLibrary {
 
     // patron must be trying to check out a book that has a spare copy
     if (!this.inStock(book)) {
+      return new Errors.ErrResult([Errors.error("isbn", {code: "BAD_REQ", widget: "isbn"})]);
+    }
+
+    return Errors.VOID_RESULT as Errors.Result<Errors.Err>;
+  }
+
+  private validateReturnRequest(req: Record<string, any>): Errors.Result<Errors.Err> {
+    // check presence
+    if (req.patronId === undefined) {
+      return new Errors.ErrResult([Errors.error("patronId", {code: "MISSING", widget: "patronId"})]);
+    } else if (req.isbn === undefined) {
+      return new Errors.ErrResult([Errors.error("isbn", {code: "MISSING", widget: "isbn"})]);
+    }
+
+    // check types
+    if (typeof req.patronId !== "string") {
+      return new Errors.ErrResult([Errors.error("patronId", {code: "BAD_TYPE", widget: "patronId"})]);
+    } else if (typeof req.isbn !== "string") {
+      return new Errors.ErrResult([Errors.error("isbn", {code: "BAD_TYPE", widget: "isbn"})]);
+    }
+
+    // check other constraints
+    // patron must have a name
+    if (req.patronId === "") {
+      return new Errors.ErrResult([Errors.error("patronId", {code: "BAD_REQ", widget: "patronId"})]);
+    }
+
+    // patron must be trying to return a book that exists
+    if (this.books.every((a: XBook) => a.isbn != req.isbn)) {
+      return new Errors.ErrResult([Errors.error("isbn", {code: "BAD_REQ", widget: "isbn"})])
+    }
+    const book = this.getBook(req.isbn)!;
+
+    // patron must be trying to return a book that they checked out previously
+    if (!this.checkout.get(req.patronId)?.some((b: XBook) => this.areEqual(b, book))) {
       return new Errors.ErrResult([Errors.error("isbn", {code: "BAD_REQ", widget: "isbn"})]);
     }
 
@@ -172,7 +206,7 @@ export class LendingLibrary {
    *             inconsistent with the data already present.
    */
   addBook(req: Record<string, any>): Errors.Result<XBook> {
-    const validation = this.validateCheckoutRequest(req);
+    const validation = this.validateAddRequest(req);
     if (validation.isOk) {
       const bookToAdd: XBook = {
         isbn: req.isbn,
@@ -214,13 +248,13 @@ export class LendingLibrary {
    *    BAD_REQ error on business rule violation.
    */
   checkoutBook(req: Record<string, any>) : Errors.Result<void> {
-    const validation = this.validateAddRequest(req);
+    const validation = this.validateCheckoutRequest(req);
     if (validation.isOk) {
-      const [patron, id] = [req.patronId, req.isbn];
+      const [patron, book] = [req.patronId, this.getBook(req.isbn)!];
       if (this.checkout.has(patron)) {
-        this.checkout.get(patron)!.push(id);
+        this.checkout.get(patron)!.push(book);
       } else {
-        this.checkout.set(patron, [id]);
+        this.checkout.set(patron, [book]);
       }
       return Errors.VOID_RESULT;
     } else {
@@ -236,8 +270,22 @@ export class LendingLibrary {
    *    BAD_REQ error on business rule violation.
    */
   returnBook(req: Record<string, any>) : Errors.Result<void> {
-    //TODO 
-    return Errors.errResult('TODO');  //placeholder
+    const validation = this.validateReturnRequest(req);
+    if (validation.isOk) {
+      const book = this.getBook(req.isbn)!;
+      const checkoutList = this.checkout.get(req.patronId)!
+
+      for (let i = 0; i < checkoutList.length; i++) {
+        if (this.areEqual(checkoutList[i], book)) {
+          checkoutList.splice(i, 1);
+          break;
+        }
+      }
+
+      return Errors.VOID_RESULT
+    } else {
+      return Errors.errResult(validation);
+    }
   }
   
 }
